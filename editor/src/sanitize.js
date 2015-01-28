@@ -19,6 +19,11 @@ if (!svgedit.sanitize) {
 	svgedit.sanitize = {};
 }
 
+if (!svgedit.sanitize.populateWishList) {
+	svgedit.sanitize.populateWishList = [];
+}
+
+
 // Namespace constants
 var svgns = "http://www.w3.org/2000/svg",
 	xlinkns = "http://www.w3.org/1999/xlink",
@@ -112,6 +117,12 @@ var svgWhiteList_ = {
 	"none": [],
 	"semantics": []
 };
+
+$.each(svgedit.sanitize.populateWishList, function() {
+    this(svgWhiteList_);
+});
+
+
 
 // Produce a Namespace-aware version of svgWhitelist
 var svgWhiteListNS_ = {};

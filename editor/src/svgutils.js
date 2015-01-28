@@ -208,6 +208,7 @@ svgedit.utilities.text2xml = function(sXML) {
 	} catch(e){ 
 		throw new Error("XML Parser could not be instantiated"); 
 	};
+    
 	try{
 		if(dXML.loadXML) out = (dXML.loadXML(sXML))?dXML:false;
 		else out = dXML.parseFromString(sXML, "text/xml");
@@ -468,7 +469,43 @@ svgedit.utilities.getBBox = function(elem) {
 	var ret = null;
 	var elname = selected.nodeName;
 	
+    
+    
 	switch ( elname ) {
+    case 'tspan':
+        var svg         = $(selected).parents('svg:first')[0];
+        var screenToSVG = svg.getScreenCTM().inverse();
+        var pt          = svg.createSVGPoint();
+        var text        = $(selected).parents('text').first()[0];
+        var text_bbox   = text.getBBox();
+        var text_rect   = text.getBoundingClientRect();
+        var rect        = selected.getBoundingClientRect();
+        
+        
+        var spans  = $(text).find('tspan');
+        
+        var str    = elem.textContent;
+        var start  = elem.getStartPositionOfChar(0);
+        var end    = elem.getEndPositionOfChar(str.length - 1);
+        
+        pt.x        = rect.left;
+        pt.y        = rect.top;
+        var span_xy = pt.matrixTransform(screenToSVG);
+        
+        pt.x        = text_rect.left;
+        pt.y        = text_rect.top;
+        var text_xy = pt.matrixTransform(screenToSVG);
+        
+        var height = text_bbox.height / spans.length;
+        
+        ret = {
+              width:  end.x - start.x
+            , height: height
+            , x:      text_bbox.x - (text_xy.x - span_xy.x)
+            , y:      text_bbox.y + ($.inArray(elem, spans) + 1) * height
+        };
+        
+        break;
 	case 'text':
 		if(selected.textContent === '') {
 			selected.textContent = 'a'; // Some character needed for the selector to use.

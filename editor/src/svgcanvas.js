@@ -120,6 +120,8 @@ var curConfig = {
 	dimensions: [640, 480]
 };
 
+
+
 // Update config with new one if given
 if(config) {
 	$.extend(curConfig, config);
@@ -2427,6 +2429,13 @@ var getMouseTarget = this.getMouseTarget = function(evt) {
 				started = true;
 				current_resize_mode = "none";
 				if(right_click) started = false;
+                
+                
+                if (mouse_target.getAttribute("selectable") == 'false') {
+                    
+                    started = false;
+                    break;
+                }
 				
 				if (mouse_target != svgroot) {
 					// if this element is not yet selected, clear selection and select it
@@ -3531,9 +3540,14 @@ var getMouseTarget = this.getMouseTarget = function(evt) {
 		var parent = evt_target.parentNode;
 		var mouse_target = getMouseTarget(evt);
 		var tagName = mouse_target.tagName;
-
-		if(parent === current_group) return;
 		
+		var e = $.Event("context_changed");
+		(canvas).trigger(e, [mouse_target]);
+		if (e.isDefaultPrevented()) {
+			return;
+		}
+		
+		if(parent === current_group) return;
 		if(tagName === 'text' && current_mode !== 'textedit') {
 			var pt = transformPoint( evt.pageX, evt.pageY, root_sctm );
 			textActions.select(mouse_target, pt.x, pt.y);
@@ -3633,7 +3647,8 @@ var textActions = canvas.textActions = function() {
 	var allow_dbl;
 	
 	function setCursor(index) {
-		var empty = (textinput.value === "");
+        
+		var empty = (textinput.textContent === "");
 		$(textinput).focus();
 	
 		if(!arguments.length) {
@@ -3647,6 +3662,7 @@ var textActions = canvas.textActions = function() {
 		
 		var charbb;
 		charbb = chardata[index];
+        
 		if(!empty) {
 			textinput.setSelectionRange(index, index);
 		}
@@ -3666,13 +3682,11 @@ var textActions = canvas.textActions = function() {
 				var show = (cursor.getAttribute('display') === 'none');
 				cursor.setAttribute('display', show?'inline':'none');
 			}, 600);
-
 		}
-		
-		
-		var start_pt = ptToScreen(charbb.x, textbb.y);
-		var end_pt = ptToScreen(charbb.x, (textbb.y + textbb.height));
-		
+        
+		var start_pt = ptToScreen(charbb.x, charbb.y);
+		var end_pt = ptToScreen(charbb.x, charbb.y - charbb.height);
+        
 		assignAttributes(cursor, {
 			x1: start_pt.x,
 			y1: start_pt.y,
@@ -3712,19 +3726,30 @@ var textActions = canvas.textActions = function() {
 		var startbb = chardata[start];
 		
 		var endbb = chardata[end];
-		
+        
+        var dstr = [];
+        
+        for(var i=start; i < end; i++) {
+            var current = chardata[i];
+            var next    = chardata[i + 1];
+            if (current.tspan != next.tspan) {
+                continue;
+            }
+            var tspanbb = svgedit.utilities.getBBox(current.tspan);
+            var text_y  = (current.tspan.nodeName == 'text' ? tspanbb.height : 0);
+            var tl = ptToScreen(current.x, tspanbb.y - 1  +text_y),
+                tr = ptToScreen(current.x + (next.x - current.x), tspanbb.y - 1 + text_y),
+                bl = ptToScreen(current.x, tspanbb.y - tspanbb.height + 1 + text_y),
+                br = ptToScreen(current.x + (next.x - current.x), tspanbb.y - tspanbb.height + 1 + text_y);
+                dstr.push("M" + tl.x + "," + tl.y
+                        + " L" + tr.x + "," + tr.y
+                        + " " + br.x + "," + br.y
+                        + " " + bl.x + "," + bl.y + "z");
+        }
+        
 		cursor.setAttribute('visibility', 'hidden');
 		
-		var tl = ptToScreen(startbb.x, textbb.y),
-			tr = ptToScreen(startbb.x + (endbb.x - startbb.x), textbb.y),
-			bl = ptToScreen(startbb.x, textbb.y + textbb.height),
-			br = ptToScreen(startbb.x + (endbb.x - startbb.x), textbb.y + textbb.height);
-		
-		
-		var dstr = "M" + tl.x + "," + tl.y
-					+ " L" + tr.x + "," + tr.y
-					+ " " + br.x + "," + br.y
-					+ " " + bl.x + "," + bl.y + "z";
+        dstr = dstr.join("");
 		
 		assignAttributes(selblock, {
 			d: dstr,
@@ -3843,11 +3868,52 @@ var textActions = canvas.textActions = function() {
 	}
 
 	return {
+        getTextContent: function(text) {
+            var spans = $(text).find('tspan');
+            if (spans.length == 0) {
+                spans = [text];
+            }
+            result = [];
+            $.each(spans, function(k, span) {
+                result.push(span.textContent.replace("\n", ""));
+            });
+            return result.join("\n");
+        }, 
+        setTextContent: function(text, content) {
+            $(text).empty();
+            var lines = content.split("\n");
+            //if (lines.length == 1) {
+            //    text.textContent = text;
+            //} else {
+                $.each(lines, function(i, line) {
+                    var attr = {
+                        "id": getNextId(), 
+                        "xml:space" : "preserve"
+                    };
+                    
+                    line = line + "";
+                    if (line.length == 0) {
+                        line = " ";
+                    }
+                    
+                    if (i > 0) {
+                        attr["dy"] = "1em";
+                        attr["x"]  = $(text).attr("x");
+                    }
+                    
+                    var span = addSvgElementFromJson({"element": "tspan","attr": attr});
+                    span.textContent = line;
+                    $(text).append(span);
+                    span = null;
+                });
+            //}
+        },
 		select: function(target, x, y) {
 			curtext = target;
 			textActions.toEditMode(x, y);
 		},
 		start: function(elem) {
+            textinput.value = '';
 			curtext = elem;
 			textActions.toEditMode();
 		},
@@ -3963,12 +4029,18 @@ var textActions = canvas.textActions = function() {
 				selectorManager.requestSelector(curtext).showGrips(false);
 			}
 			
-			var str = curtext.textContent;
+			var str = textActions.getTextContent(curtext);
 			var len = str.length;
-			
+            
 			var xform = curtext.getAttribute('transform');
 
 			textbb = svgedit.utilities.getBBox(curtext);
+            
+            tspans = $(curtext).find('tspan');
+            
+            if (tspans.length == 0) {
+                tspans = [curtext];
+            }
 			
 			matrix = xform?getMatrix(curtext):null;
 
@@ -3980,37 +4052,49 @@ var textActions = canvas.textActions = function() {
 			if(!len) {
 				var end = {x: textbb.x + (textbb.width/2), width: 0};
 			}
-			
-			for(var i=0; i<len; i++) {
-				var start = curtext.getStartPositionOfChar(i);
-				var end = curtext.getEndPositionOfChar(i);
-				
-				if(!svgedit.browser.supportsGoodTextCharPos()) {
-					var offset = canvas.contentW * current_zoom;
-					start.x -= offset;
-					end.x -= offset;
-					
-					start.x /= current_zoom;
-					end.x /= current_zoom;
-				}
-				
-				// Get a "bbox" equivalent for each character. Uses the
-				// bbox data of the actual text for y, height purposes
-				
-				// TODO: Decide if y, width and height are actually necessary
-				chardata[i] = {
-					x: start.x,
-					y: textbb.y, // start.y?
-					width: end.x - start.x,
-					height: textbb.height
-				};
-			}
-			
-			// Add a last bbox for cursor at end of text
-			chardata.push({
-				x: end.x,
-				width: 0
-			});
+            chardata = [];
+            $.each(tspans, function(index, tspan) {
+                var str = tspan.textContent + "";
+                var len = str.length;
+                var text_y;
+                for(var i=0; i<len; i++) {
+                    var start  = tspan.getStartPositionOfChar(i);
+                    var end    = tspan.getEndPositionOfChar(i);
+                    var spanbb = svgedit.utilities.getBBox(tspan);
+                    
+                    if (!spanbb) {
+                        break;
+                    }
+                    var text_y = (tspan.nodeName == 'text' ? spanbb.height : 0);
+                    if(!svgedit.browser.supportsGoodTextCharPos()) {
+                        var offset = canvas.contentW * current_zoom;
+                        start.x -= offset;
+                        end.x -= offset;
+                        
+                        start.x /= current_zoom;
+                        end.x /= current_zoom;
+                    }
+                    
+                    // Get a "bbox" equivalent for each character. Uses the
+                    // bbox data of the actual text for y, height purposes
+                    // TODO: Decide if y, width and height are actually necessary
+                    chardata.push({
+                        x: start.x,
+                        y: spanbb.y + (tspan.nodeName == 'text' ? spanbb.height : 0), // start.y?
+                        width: end.x - start.x,
+                        height: spanbb.height,
+                        tspan: tspan
+                    });
+                }
+                if (str != " ") {
+                    // Add a last bbox for cursor at end of text
+                    chardata.push({
+                        x: end.x, y: spanbb.y + text_y, height: spanbb.height,
+                        width: end.x - start.x, tspan: tspan
+                    });
+                }
+            });
+            
 			setSelection(textinput.selectionStart, textinput.selectionEnd, true);
 		}
 	}
@@ -5306,7 +5390,7 @@ var removeUnusedDefElems = this.removeUnusedDefElems = function() {
 // String containing the SVG image for output
 this.svgCanvasToString = function() {
 	// keep calling it until there are none to remove
-	while (removeUnusedDefElems() > 0) {};
+	// while (removeUnusedDefElems() > 0) {};
 	
 	pathActions.clear(true);
 	
@@ -5376,6 +5460,7 @@ this.svgToString = function(elem, indent) {
 			attr,
 			i,
 			childs = elem.childNodes;
+            
 		
 		for (var i=0; i<indent; i++) out.push(" ");
 		out.push("<"); out.push(elem.nodeName);
@@ -5972,10 +6057,11 @@ var convertToGroup = this.convertToGroup = function(elem) {
 // Returns:
 // This function returns false if the set was unsuccessful, true otherwise.
 this.setSvgString = function(xmlString) {
+    
 	try {
 		// convert string into XML document
 		var newDoc = svgedit.utilities.text2xml(xmlString);
-
+    
 		this.prepareSvg(newDoc);
 
 		var batchCmd = new BatchCommand("Change Source");
@@ -8076,12 +8162,12 @@ var changeSelectedAttributeNoUndo = this.changeSelectedAttributeNoUndo = functio
   			continue;
   		}
 
-  		var oldval = attr === "#text" ? elem.textContent : elem.getAttribute(attr);
+  		var oldval = attr === "#text" ? textActions.getTextContent(elem) : elem.getAttribute(attr);
   		if (oldval == null)  oldval = "";
   		if (oldval !== String(newValue)) {
   			if (attr == "#text") {
   				var old_w = svgedit.utilities.getBBox(elem).width;
-  				elem.textContent = newValue;
+  				textActions.setTextContent(elem, newValue);
 
   			} else if (attr == "#href") {
   				setHref(elem, newValue);

@@ -33,6 +33,7 @@
 		  initFill: {color: 'fff', opacity: 1},
 		  initStroke: {width: 1.5, color: '000', opacity: 1},
 			initOpacity: 1,
+			pasteType: 'in_place',
 			imgPath: 'images/',
 			extPath: 'extensions/',
 			jGraduatePath: 'jgraduate/images/',
@@ -40,7 +41,7 @@
 			initTool: 'select',
 			wireframe: false,
 			colorPickerCSS: false,
-			gridSnapping: false,
+			gridSnapping: true,
 			gridColor: "#000",
 			baseUnit: 'px',
 			snappingStep: 10,
@@ -1045,6 +1046,7 @@
 								placement_obj['#' + id] = svgicon;
 							}
 						}
+                        
 						
 						var cls, parent;
 						
@@ -1386,7 +1388,7 @@
 				var w = Math.min(Math.max(12 + elem.value.length * 6, 50), 300);
 				$(elem).width(w);
 			}
-		
+	
 			// updates the context panel tools based on the selected element
 			var updateContextPanel = function(e) {
 			var elem = selectedElement;
@@ -1570,7 +1572,7 @@
 							$('#tool_bold').toggleClass('active', svgCanvas.getBold())
 							$('#font_family').val(font_family);
 							$('#font_size').val(elem.getAttribute("font-size"));
-							$('#text').val(elem.textContent);
+							$('#text').val(svgCanvas.textActions.getTextContent(elem));
 							$('#preview_font').text(font_family.split(",")[0].replace(/'/g, "")).css('font-family', font_family);
 							if (svgCanvas.addedNew) {
 								// Timeout needed for IE9
@@ -1691,6 +1693,9 @@
 					ctl.value = .1;
 					return;
 				}
+                
+                
+                
 				var zoom = svgCanvas.getZoom();
 				var w_area = workarea;
 				zoomChanged(window, {
@@ -1702,6 +1707,14 @@
 					zoom: zoomlevel
 				}, true);
 			}
+            
+            Editor.changeZoom = function(val) {
+                changeZoom({"value": val});
+            }
+            
+            Editor.clickGroup = function() {
+                clickGroup();
+            };
 			
 			var changeBlur = function(ctl, completed) {
 				val = ctl.value;
@@ -1738,8 +1751,12 @@
 				svgCanvas.setFontFamily(this.value);
 			});
 				
-			$('#text').keyup(function(){
-				svgCanvas.setTextContent(this.value);
+			$('#text').keyup(function(e) {
+				if(e.keyCode == 27) {
+					svgCanvas.textActions.toSelectMode(selectedElement);
+				} else {
+					svgCanvas.setTextContent(this.value);
+				}
 			});
 		  
 			changeAttribute = function(el, completed) {
@@ -2216,7 +2233,7 @@
 				var zoom = svgCanvas.getZoom();				
 				var x = (workarea[0].scrollLeft + workarea.width()/2)/zoom  - svgCanvas.contentW; 
 				var y = (workarea[0].scrollTop + workarea.height()/2)/zoom  - svgCanvas.contentH;
-				svgCanvas.pasteElements('point', x, y); 
+				svgCanvas.pasteElements(curConfig.pasteType, x, y);
 			}
 			
 			var moveToTopSelected = function() {
@@ -3228,7 +3245,7 @@
 			$('input,select').attr("autocomplete","off");
 			
 			// Associate all button actions as well as non-button keyboard shortcuts
-			var Actions = function() {
+			var Actions  = function() {
 				// sel:'selector', fn:function, evt:'event', key:[key, preventDefault, NoDisableInInput]
 				var tool_buttons = [
 					{sel:'#tool_select', fn: clickSelect, evt: 'click', key: ['V', true]},
@@ -4073,7 +4090,7 @@
 				cb();
 			}
 		};
-
+        
 		Editor.runCallbacks = function() {
 			$.each(callbacks, function() {
 				this();
